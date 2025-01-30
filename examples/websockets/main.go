@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"github.com/coder/websocket"
-	"github.com/elazarl/goproxy"
+	"github.com/InsideOutSec/goproxy"
 	"log"
 	"net/http"
 	"net/url"

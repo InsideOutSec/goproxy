@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"flag"
-	"github.com/elazarl/goproxy"
+	"github.com/InsideOutSec/goproxy"
 	"log"
 	"net"
 	"net/http"

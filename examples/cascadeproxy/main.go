@@ -9,8 +9,8 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/elazarl/goproxy"
-	"github.com/elazarl/goproxy/ext/auth"
+	"github.com/InsideOutSec/goproxy"
+	"github.com/InsideOutSec/goproxy/ext/auth"
 )
 
 const _proxyAuthHeader = "Proxy-Authorization"
