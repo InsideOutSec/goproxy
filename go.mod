@@ -1,8 +1,9 @@
-module github.com/elazarl/goproxy
+module github.com/InsideOutSec/goproxy
 
 go 1.20
 
 require (
+	github.com/elazarl/goproxy v1.7.0
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/net v0.34.0
 )
