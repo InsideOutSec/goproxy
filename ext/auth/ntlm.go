@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/elazarl/goproxy"
+	"github.com/InsideOutSec/goproxy"
 	httpntlm "github.com/vadimi/go-http-ntlm/v2"
 )
 
