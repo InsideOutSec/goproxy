@@ -47,6 +47,7 @@ func NTLMAuthMiddleware(domain, username, password string, maxRetries int) gopro
 
 				// If the authentication was successful, return the response
 				if resp.StatusCode != http.StatusUnauthorized {
+					log.Printf("[NTLM] Request successfull: %v", resp)
 					return req, resp
 				}
 
@@ -78,6 +79,7 @@ func NTLMAuthMiddleware(domain, username, password string, maxRetries int) gopro
 // getNTLMClientForHost returns a cached *http.Client with NTLM authentication for the given host.
 func getNTLMClientForHost(host string, base http.RoundTripper, auth *NTLMAuth) *http.Client {
 	if c, ok := ntlmClientCache.Load(host); ok {
+		log.Println("[NTLM] Using client cached auth")
 		return c.(*http.Client)
 	}
 
@@ -100,6 +102,7 @@ func getNTLMClientForHost(host string, base http.RoundTripper, auth *NTLMAuth) *
 
 // requiresNTLM checks if the request requires NTLM authentication.
 func requiresNTLM(req *http.Request) bool {
+	log.Println("[NTLM] Check if required")
 	return strings.Contains(req.Header.Get("Proxy-Authorization"), "NTLM") ||
 		strings.Contains(req.Header.Get("Authorization"), "NTLM")
 }
