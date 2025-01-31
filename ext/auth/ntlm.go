@@ -36,16 +36,16 @@ func NTLMAuthMiddleware(domain, username, password string, maxRetries int) gopro
 		fmt.Println("[NTLM] Entering authentication flow")
 
 		client := getNTLMClientForHost(req.URL.Host, ctx.Proxy.Tr, auth)
+		fmt.Println("[NTLM] Client =", client)
 		var resp *http.Response
 		var err error
 
-		// First attempt - send request normally, capture response
 		newReq := req.Clone(req.Context())
 		newReq.RequestURI = ""             // Prevent RequestURI error
 		newReq.URL.Host = req.URL.Host     // Ensure request keeps the correct Host
 		newReq.URL.Scheme = req.URL.Scheme // Ensure the request keeps the correct Scheme
 		resp, err = client.Transport.RoundTrip(newReq)
-		fmt.Println("[NTLM] Changed cllient req", req)
+
 		if err != nil {
 			fmt.Printf("[NTLM] Initial request failed: %v\n", err)
 			return req, goproxy.NewResponse(req, goproxy.ContentTypeText, http.StatusProxyAuthRequired, "NTLM Authentication Failed")
@@ -63,7 +63,7 @@ func NTLMAuthMiddleware(domain, username, password string, maxRetries int) gopro
 				client = getNTLMClientForHost(req.URL.Host, ctx.Proxy.Tr, auth)
 
 				// Resend request with NTLM headers
-				resp, err = client.Transport.RoundTrip(req)
+				resp, err = client.Transport.RoundTrip(newReq)
 				if err != nil {
 					log.Printf("[NTLM] NTLM authentication attempt failed: %v", err)
 					continue
