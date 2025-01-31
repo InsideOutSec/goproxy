@@ -106,7 +106,7 @@ func getNTLMClientForHost(host string, base http.RoundTripper, auth *NTLMAuth) *
 		Domain:       auth.Domain,
 		User:         auth.Username,
 		Password:     auth.Password,
-		RoundTripper: base,
+		RoundTripper: loggingTransport{base},
 	}
 
 	client := &http.Client{
@@ -116,6 +116,16 @@ func getNTLMClientForHost(host string, base http.RoundTripper, auth *NTLMAuth) *
 
 	ntlmClientCache.Store(host, client)
 	return client
+}
+
+// Wrap the transport in a logging middleware to see requests before they are sent
+type loggingTransport struct {
+	base http.RoundTripper
+}
+
+func (t loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	log.Printf("[NTLM] Sending request - URL: %s, Host: %s, RequestURI: '%s'", req.URL, req.Host, req.RequestURI)
+	return t.base.RoundTrip(req)
 }
 
 // isNTLMRequired checks if NTLM authentication is required by the server response.
@@ -140,6 +150,9 @@ func createOutboundRequest(req *http.Request) (*http.Request, error) {
 	outReq.Header = req.Header.Clone()
 	outReq.Host = req.Host
 	outReq.RequestURI = "" // MUST be empty for Go http.Client
+
+	// Debug log
+	log.Printf("[NTLM] Outbound request built - URL: %s, Host: %s, RequestURI: '%s'", outReq.URL, outReq.Host, outReq.RequestURI)
 
 	return outReq, nil
 }
