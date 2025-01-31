@@ -29,8 +29,10 @@ func NTLMAuthMiddleware(domain, username, password string, maxRetries int) gopro
 		Password:   password,
 		MaxRetries: maxRetries,
 	}
+	log.Println("[NTLM] Before first return")
 
 	return goproxy.FuncReqHandler(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+		log.Println("[NTLM] Entering flow")
 		if requiresNTLM(req) {
 			client := getNTLMClientForHost(req.URL.Host, ctx.Proxy.Tr, auth)
 
@@ -102,7 +104,7 @@ func getNTLMClientForHost(host string, base http.RoundTripper, auth *NTLMAuth) *
 
 // requiresNTLM checks if the request requires NTLM authentication.
 func requiresNTLM(req *http.Request) bool {
-	log.Println("[NTLM] Check if required")
+	log.Println("[NTLM] Check requiresNTLM")
 	return strings.Contains(req.Header.Get("Proxy-Authorization"), "NTLM") ||
 		strings.Contains(req.Header.Get("Authorization"), "NTLM")
 }
