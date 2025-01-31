@@ -11,18 +11,18 @@ import (
 	httpntlm "github.com/vadimi/go-http-ntlm/v2"
 )
 
-// NTLMAuth holds credentials and retry settings for NTLM authentication
+// NTLMAuth stores credentials and retry settings
 type NTLMAuth struct {
 	Domain     string
 	Username   string
 	Password   string
-	MaxRetries int // Number of times to retry authentication if it fails
+	MaxRetries int
 }
 
-// Cache NTLM-capable HTTP clients per host to reuse sessions
+// Cache NTLM-capable HTTP clients per host
 var ntlmClientCache sync.Map
 
-// NTLMAuthMiddleware applies NTLM authentication for proxy requests
+// NTLMAuthMiddleware applies NTLM authentication
 func NTLMAuthMiddleware(domain, username, password string, maxRetries int) goproxy.ReqHandler {
 	auth := &NTLMAuth{
 		Domain:     domain,
@@ -35,23 +35,23 @@ func NTLMAuthMiddleware(domain, username, password string, maxRetries int) gopro
 	return goproxy.FuncReqHandler(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		fmt.Println("[NTLM] Entering authentication flow")
 
+		// Create a clean outbound request
+		outReq, err := createOutboundRequest(req)
+		if err != nil {
+			log.Printf("[NTLM] Error creating outbound request: %v", err)
+			return req, goproxy.NewResponse(req, goproxy.ContentTypeText, http.StatusProxyAuthRequired, "NTLM Authentication Failed")
+		}
+
 		client := getNTLMClientForHost(req.URL.Host, ctx.Proxy.Tr, auth)
-		fmt.Println("[NTLM] Client =", client)
-		var resp *http.Response
-		var err error
 
-		newReq := req.Clone(req.Context())
-		newReq.RequestURI = ""             // Prevent RequestURI error
-		newReq.URL.Host = req.URL.Host     // Ensure request keeps the correct Host
-		newReq.URL.Scheme = req.URL.Scheme // Ensure the request keeps the correct Scheme
-		resp, err = client.Transport.RoundTrip(newReq)
-
+		// First attempt: Send request normally and check if NTLM is required
+		resp, err := client.Transport.RoundTrip(outReq)
 		if err != nil {
 			fmt.Printf("[NTLM] Initial request failed: %v\n", err)
 			return req, goproxy.NewResponse(req, goproxy.ContentTypeText, http.StatusProxyAuthRequired, "NTLM Authentication Failed")
 		}
 
-		// If server responds with 401 and NTLM authentication is required
+		// If server responds with 401 and requires NTLM authentication
 		if resp.StatusCode == http.StatusUnauthorized && isNTLMRequired(resp) {
 			log.Printf("[NTLM] Server requires NTLM authentication for %s", req.URL.Host)
 
@@ -62,8 +62,14 @@ func NTLMAuthMiddleware(domain, username, password string, maxRetries int) gopro
 				// Reinitialize client for retry
 				client = getNTLMClientForHost(req.URL.Host, ctx.Proxy.Tr, auth)
 
-				// Resend request with NTLM headers
-				resp, err = client.Transport.RoundTrip(newReq)
+				// Recreate outbound request for retry
+				outReq, err = createOutboundRequest(req)
+				if err != nil {
+					log.Printf("[NTLM] Error creating outbound request on retry: %v", err)
+					return req, goproxy.NewResponse(req, goproxy.ContentTypeText, http.StatusProxyAuthRequired, "NTLM Authentication Failed")
+				}
+
+				resp, err = client.Transport.RoundTrip(outReq)
 				if err != nil {
 					log.Printf("[NTLM] NTLM authentication attempt failed: %v", err)
 					continue
@@ -88,7 +94,7 @@ func NTLMAuthMiddleware(domain, username, password string, maxRetries int) gopro
 	})
 }
 
-// getNTLMClientForHost returns a cached *http.Client with NTLM authentication for the given host.
+// getNTLMClientForHost returns a cached *http.Client with NTLM authentication
 func getNTLMClientForHost(host string, base http.RoundTripper, auth *NTLMAuth) *http.Client {
 	if c, ok := ntlmClientCache.Load(host); ok {
 		fmt.Println("[NTLM] Using cached NTLM client for", host)
@@ -100,7 +106,7 @@ func getNTLMClientForHost(host string, base http.RoundTripper, auth *NTLMAuth) *
 		Domain:       auth.Domain,
 		User:         auth.Username,
 		Password:     auth.Password,
-		RoundTripper: base, // Use goproxy's transport
+		RoundTripper: base,
 	}
 
 	client := &http.Client{
@@ -114,7 +120,6 @@ func getNTLMClientForHost(host string, base http.RoundTripper, auth *NTLMAuth) *
 
 // isNTLMRequired checks if NTLM authentication is required by the server response.
 func isNTLMRequired(resp *http.Response) bool {
-	fmt.Println("[NTLM] Checking for NTLM headers in response")
 	for _, header := range resp.Header["Www-Authenticate"] {
 		if strings.Contains(strings.ToUpper(header), "NTLM") {
 			fmt.Println("[NTLM] Server requested NTLM authentication")
@@ -122,4 +127,19 @@ func isNTLMRequired(resp *http.Response) bool {
 		}
 	}
 	return false
+}
+
+// createOutboundRequest ensures the request is properly formatted for NTLM authentication.
+func createOutboundRequest(req *http.Request) (*http.Request, error) {
+	outReq, err := http.NewRequest(req.Method, req.URL.String(), req.Body)
+	if err != nil {
+		return nil, fmt.Errorf("[NTLM] Error creating outbound request: %w", err)
+	}
+
+	// Copy headers, Host, and ensure RequestURI is empty
+	outReq.Header = req.Header.Clone()
+	outReq.Host = req.Host
+	outReq.RequestURI = "" // MUST be empty for Go http.Client
+
+	return outReq, nil
 }

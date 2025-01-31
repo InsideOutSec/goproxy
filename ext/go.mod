@@ -3,7 +3,7 @@ module github.com/InsideOutSec/goproxy/ext
 go 1.20
 
 require (
-	github.com/InsideOutSec/goproxy v0.0.0-20250130185250-165e02b405b0
+	github.com/InsideOutSec/goproxy v0.0.0-20250131112234-4c355f472587
 	github.com/stretchr/testify v1.10.0
 	github.com/vadimi/go-http-ntlm/v2 v2.5.0
 	golang.org/x/net v0.34.0
