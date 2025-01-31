@@ -35,57 +35,51 @@ func NTLMAuthMiddleware(domain, username, password string, maxRetries int) gopro
 	return goproxy.FuncReqHandler(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		fmt.Println("[NTLM] Entering authentication flow")
 
-		// Ensure NTLM is applied if required
-		if requiresNTLM(req) {
-			fmt.Println("[NTLM] NTLM required, proceed with auth flow")
-			client := getNTLMClientForHost(req.URL.Host, ctx.Proxy.Tr, auth)
+		client := getNTLMClientForHost(req.URL.Host, ctx.Proxy.Tr, auth)
+		var resp *http.Response
+		var err error
 
-			var resp *http.Response
-			var err error
+		// First attempt - send request normally, capture response
+		resp, err = client.Transport.RoundTrip(req)
+		if err != nil {
+			fmt.Printf("[NTLM] Initial request failed: %v\n", err)
+			return req, goproxy.NewResponse(req, goproxy.ContentTypeText, http.StatusProxyAuthRequired, "NTLM Authentication Failed")
+		}
 
-			// If no Authorization header, force NTLM Negotiate on first request
-			if req.Header.Get("Authorization") == "" {
-				log.Printf("[NTLM] No NTLM Authorization header found. Sending Negotiate request...")
-				req.Header.Set("Authorization", "NTLM") // Force NTLM Negotiate
-			}
+		// If server responds with 401 and NTLM authentication is required
+		if resp.StatusCode == http.StatusUnauthorized && isNTLMRequired(resp) {
+			log.Printf("[NTLM] Server requires NTLM authentication for %s", req.URL.Host)
 
-			// Attempt authentication with retries
-			for attempt := 0; attempt <= auth.MaxRetries; attempt++ {
+			// Retry authentication with NTLM
+			for attempt := 0; attempt < auth.MaxRetries; attempt++ {
+				log.Printf("[NTLM] Attempt %d/%d for %s", attempt+1, auth.MaxRetries, req.URL.Host)
+
+				// Reinitialize client for retry
+				client = getNTLMClientForHost(req.URL.Host, ctx.Proxy.Tr, auth)
+
+				// Resend request with NTLM headers
 				resp, err = client.Transport.RoundTrip(req)
 				if err != nil {
-					fmt.Printf("[NTLM] Request failed: %v", err)
-					break
+					log.Printf("[NTLM] NTLM authentication attempt failed: %v", err)
+					continue
 				}
 
-				// If authentication is successful, return the response
+				// If authentication succeeds, return response
 				if resp.StatusCode != http.StatusUnauthorized {
-					fmt.Printf("[NTLM] Authentication successful for %s\n", req.URL.Host)
+					log.Printf("[NTLM] Authentication successful for %s", req.URL.Host)
 					return req, resp
 				}
 
-				log.Printf("[NTLM] Attempt %d/%d failed for %s, retrying...", attempt+1, auth.MaxRetries, req.URL.Host)
-
-				// If we've reached the retry limit, return the server's last error response
-				if attempt == auth.MaxRetries {
-					fmt.Printf("[NTLM] Authentication failed after %d attempts for %s\n", auth.MaxRetries, req.URL.Host)
-					return req, resp
-				}
-
-				// If 401 Unauthorized, restart the NTLM handshake
-				req.Header.Set("Authorization", "NTLM")
-				client = getNTLMClientForHost(req.URL.Host, ctx.Proxy.Tr, auth)
+				log.Printf("[NTLM] Authentication failed, retrying...")
 			}
 
-			// If an error occurred, return a generic 407 Proxy Auth Required response
-			if err != nil {
-				return req, goproxy.NewResponse(req, goproxy.ContentTypeText, http.StatusProxyAuthRequired, "NTLM Authentication Failed")
-			}
-
-			// Return the last failed response from the server
+			// If all attempts fail, return the last response
+			log.Printf("[NTLM] Authentication failed after %d attempts for %s", auth.MaxRetries, req.URL.Host)
 			return req, resp
 		}
 
-		return req, nil
+		// If authentication isn't required, return the response
+		return req, resp
 	})
 }
 
@@ -113,9 +107,13 @@ func getNTLMClientForHost(host string, base http.RoundTripper, auth *NTLMAuth) *
 	return client
 }
 
-// requiresNTLM checks if the request requires NTLM authentication.
-func requiresNTLM(req *http.Request) bool {
-	fmt.Println("[NTLM] Checking if request requires NTLM")
-	return strings.Contains(req.Header.Get("Proxy-Authorization"), "NTLM") ||
-		strings.Contains(req.Header.Get("Authorization"), "NTLM")
+// isNTLMRequired checks if NTLM authentication is required by the server response.
+func isNTLMRequired(resp *http.Response) bool {
+	for _, header := range resp.Header["Www-Authenticate"] {
+		if strings.Contains(strings.ToUpper(header), "NTLM") {
+			fmt.Println("[NTLM] Server requested NTLM authentication")
+			return true
+		}
+	}
+	return false
 }
