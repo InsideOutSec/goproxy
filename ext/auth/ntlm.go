@@ -109,6 +109,7 @@ func getNTLMClientForHost(host string, base http.RoundTripper, auth *NTLMAuth) *
 
 // isNTLMRequired checks if NTLM authentication is required by the server response.
 func isNTLMRequired(resp *http.Response) bool {
+	fmt.Println("[NTLM] Checking for NTLM headers in response")
 	for _, header := range resp.Header["Www-Authenticate"] {
 		if strings.Contains(strings.ToUpper(header), "NTLM") {
 			fmt.Println("[NTLM] Server requested NTLM authentication")
