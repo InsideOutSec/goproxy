@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -29,10 +30,10 @@ func NTLMAuthMiddleware(domain, username, password string, maxRetries int) gopro
 		Password:   password,
 		MaxRetries: maxRetries,
 	}
-	log.Println("[NTLM] Before first return")
+	fmt.Println("[NTLM] Before first return")
 
 	return goproxy.FuncReqHandler(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-		log.Println("[NTLM] Entering flow")
+		fmt.Println("[NTLM] Entering flow")
 		if requiresNTLM(req) {
 			client := getNTLMClientForHost(req.URL.Host, ctx.Proxy.Tr, auth)
 
@@ -43,13 +44,13 @@ func NTLMAuthMiddleware(domain, username, password string, maxRetries int) gopro
 			for attempt := 0; attempt <= auth.MaxRetries; attempt++ {
 				resp, err = client.Transport.RoundTrip(req)
 				if err != nil {
-					log.Printf("[NTLM] Request failed: %v", err)
+					fmt.Printf("[NTLM] Request failed: %v", err)
 					break
 				}
 
 				// If the authentication was successful, return the response
 				if resp.StatusCode != http.StatusUnauthorized {
-					log.Printf("[NTLM] Request successfull: %v", resp)
+					fmt.Printf("[NTLM] Request successfull: %v", resp)
 					return req, resp
 				}
 
@@ -57,7 +58,7 @@ func NTLMAuthMiddleware(domain, username, password string, maxRetries int) gopro
 
 				// If we've reached the retry limit, return the server's last error response
 				if attempt == auth.MaxRetries {
-					log.Printf("[NTLM] Authentication failed after %d attempts for %s", auth.MaxRetries, req.URL.Host)
+					fmt.Printf("[NTLM] Authentication failed after %d attempts for %s", auth.MaxRetries, req.URL.Host)
 					return req, resp
 				}
 
@@ -81,11 +82,11 @@ func NTLMAuthMiddleware(domain, username, password string, maxRetries int) gopro
 // getNTLMClientForHost returns a cached *http.Client with NTLM authentication for the given host.
 func getNTLMClientForHost(host string, base http.RoundTripper, auth *NTLMAuth) *http.Client {
 	if c, ok := ntlmClientCache.Load(host); ok {
-		log.Println("[NTLM] Using client cached auth")
+		fmt.Println("[NTLM] Using client cached auth")
 		return c.(*http.Client)
 	}
 
-	log.Printf("[NTLM] Creating new NTLM client for %s", host)
+	fmt.Printf("[NTLM] Creating new NTLM client for %s", host)
 	ntlmTr := &httpntlm.NtlmTransport{
 		Domain:       auth.Domain,
 		User:         auth.Username,
@@ -104,7 +105,7 @@ func getNTLMClientForHost(host string, base http.RoundTripper, auth *NTLMAuth) *
 
 // requiresNTLM checks if the request requires NTLM authentication.
 func requiresNTLM(req *http.Request) bool {
-	log.Println("[NTLM] Check requiresNTLM")
+	fmt.Println("[NTLM] Check requiresNTLM")
 	return strings.Contains(req.Header.Get("Proxy-Authorization"), "NTLM") ||
 		strings.Contains(req.Header.Get("Authorization"), "NTLM")
 }
