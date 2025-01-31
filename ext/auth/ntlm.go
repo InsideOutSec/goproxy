@@ -37,6 +37,7 @@ func NTLMAuthMiddleware(domain, username, password string, maxRetries int) gopro
 
 		// Ensure NTLM is applied if required
 		if requiresNTLM(req) {
+			fmt.Println("[NTLM] NTLM required, proceed with auth flow")
 			client := getNTLMClientForHost(req.URL.Host, ctx.Proxy.Tr, auth)
 
 			var resp *http.Response
